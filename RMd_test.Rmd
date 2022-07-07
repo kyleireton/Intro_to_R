@@ -1,0 +1,848 @@
+---
+title: "C5 challenges"
+output:
+  html_document:
+  df_print: paged
+html_notebook:
+  fig_height: 8
+---
+
+```{r, include=FALSE}
+
+library(data.table)
+library(tidyverse)
+library(TTR)
+library(zoo)
+library(ggrepel)
+
+read_plus = function(x) {
+  read_csv(x,
+           col_types = list(col_double(),
+                            col_character(),
+                            col_character())
+           ) %>% 
+    mutate(filename = x)
+}
+
+read_plus_skip1 = function(x) {
+  read_csv(x, skip = 1) %>% 
+    mutate(filename = x)
+}
+
+get_RT = function(x) {
+  ifelse(str_detect(x,"latency"),
+         as.numeric(paste(str_extract(x, "[^latency: ]+$"), sep = ""))/1000,
+         NA)
+}
+
+st.err = function(x) {
+  sd(x)/sqrt(length(x))
+}
+
+get_CV = function(x) {
+  sd(x) / mean(x)
+}
+```
+
+
+```{r}
+
+Master_df_flexC5_chall =
+  read_csv("C:/Users/kylei/OneDrive/Zephyrus/intRo_toR/ITI9/210618_C5_master_flexC5_crunched_chall.csv") %>%
+  
+  filter(ID != "13-2") %>% 
+  
+  # ID != "1-2"
+  
+  mutate(
+    
+  Cohort = 2
+  
+  )
+
+Master_df_flexC5_chall$GT = factor(Master_df_flexC5_chall$GT, 
+                                   levels = c("W", "K"))
+
+Master_df_flexC5_chall %>% 
+  group_by(GT, Sex, ID) %>% 
+  summarise(n()) %>% 
+  count(GT, Sex)
+
+```
+
+
+```{r}
+
+Master_df_flex_chall = Master_df_flexC5_chall %>% 
+  mutate(IDreal = paste(Cohort, ID, sep = "-")) %>% 
+  dplyr::select(-ID) %>% 
+  mutate(ID = IDreal) %>% 
+  dplyr::select(-IDreal) 
+
+
+
+```
+
+```{r, fig.width = 9, fig.height = 9}
+Master_df_flex_chall_ITI9 = Master_df_flex_chall %>% 
+  filter(Stage != "SD08")
+
+Master_df_flex_chall_ITI9 %>% 
+  group_by(GT, Sex, ID) %>% 
+  summarise(n()) %>% 
+  count(GT, Sex)
+```
+
+
+```{r, fig.width = 9, fig.height = 9}
+ggplot(Master_df_flex_chall_ITI9 %>% 
+         filter(Response == "Correct") %>% 
+         group_by(GT, ID, Stage) %>% 
+         summarise(Correct = n()) ,
+       
+       aes(x = interaction(Stage, GT),
+           y = Correct,
+           fill = GT,
+           label = ID)) +
+  
+  # geom_text(hjust = 0, nudge_x = 0.1) +
+  
+  stat_summary(fun = "mean", geom = "col",
+               width = 0.75, alpha = 0.33) +
+  
+  stat_summary(fun.data = "mean_se", geom = "errorbar",
+               width = 0.5) +
+  
+  geom_jitter(color = "black", width = 0.10) +
+  
+  scale_fill_manual(values = c("blue", "red")) +
+  
+  coord_cartesian(ylim = c(0, 150)) +
+  
+  geom_hline(yintercept = 40, color = "black", size = 1) +
+  
+  theme_classic()
+```
+
+
+```{r SD08 pivot summary, fig.width = 9, fig.height = 5}
+Master_plot = Master_df_flex_chall_ITI9 %>% 
+         
+         group_by(Cohort, GT, ID, Stage) %>% 
+         
+         # mutate(Trial_max = max(Trials)) %>%
+         
+         summarise(Trial_max = max(Trials),
+                   Correct = sum(Response == "Correct"),
+                   Incorrect = sum(Response == "Incorrect"),
+                   Omission = sum(Response == "Omission"),
+                   Premature = sum(Response == "Premature"),
+                   Perseverative = sum(Response == "Perseverative"),
+                   Timeout = sum(Response == "Timeout"),
+                   
+                   Correct_percent = Correct / Trial_max,
+                   Accuracy = Correct / (Correct + Incorrect),
+                   Omissions = Omission / Trial_max,
+                   
+                   Prematures = Premature / Trial_max,
+                   Perseveratives = Perseverative / Correct,
+                   Timeouts = Timeout / Trial_max
+                   
+                   ) %>% 
+         
+         pivot_longer(cols = Correct_percent:Timeouts,
+                      names_to = "Parameter",
+                      values_to = "Percent")
+
+Master_plot$Parameter = factor(Master_plot$Parameter, 
+                                   levels = c("Correct_percent",
+                                              "Accuracy",
+                                              "Omissions",
+                                              
+                                              "Prematures",
+                                              "Perseveratives",
+                                              "Timeouts"))
+```
+
+
+```{r , fig.width = 9, fig.height = 5}
+ggplot(Master_plot %>% 
+         filter(Parameter == "Correct_percent"|
+                Parameter == "Accuracy"|
+                Parameter == "Omissions"), 
+       
+       aes(x = interaction(Stage, GT),
+           y = Percent,
+           fill = GT,
+           label = ID)) +
+  
+  facet_wrap(~ Parameter) +
+  
+  # geom_text(hjust = 0, nudge_x = 0.1) +
+  
+  stat_summary(fun = "mean", geom = "col",
+               width = 0.75, alpha = 0.5) +
+  
+  stat_summary(fun.data = "mean_se", geom = "errorbar",
+               width = 0.5) +
+  
+  geom_jitter(color = "black",
+              size = 1,
+              width = 0.10) +
+  
+  scale_fill_manual(values = c("blue", "red")) +
+  
+  theme_classic()
+```
+
+
+```{r , fig.width = 9, fig.height = 5}
+summary(aov(Correct_percent ~ GT*Stage + Error(ID),
+            Master_df_flex_chall_ITI9 %>%
+              group_by(GT, ID, Stage) %>%
+              summarise(Max_trials = max(Trials),
+                        Correct = sum(Response == "Correct"),
+                        Correct_percent = Correct / Max_trials)
+            ))
+
+
+summary(aov(Accuracy ~ GT*Stage + Error(ID),
+            Master_df_flex_chall_ITI9 %>%
+              group_by(GT, ID, Stage) %>%
+              summarise(Max_trials = max(Trials),
+                        Correct = sum(Response == "Correct"),
+                        Incorrect = sum(Response == "Incorrect"),
+                        Accuracy = Correct / (Correct + Incorrect))
+            ))
+
+
+summary(aov(Omissions ~ GT*Stage + Error(ID),
+            Master_df_flex_chall_ITI9 %>%
+              group_by(GT, ID, Stage) %>%
+              summarise(Max_trials = max(Trials),
+                        Correct = sum(Response == "Correct"),
+                        Incorrect = sum(Response == "Incorrect"),
+                        Omissions = sum(Response == "Omission") / Max_trials)
+            ))
+```
+
+
+```{r , fig.width = 9, fig.height = 5}
+ggplot(Master_plot %>% 
+         filter(Parameter == "Prematures"|
+                Parameter == "Perseveratives"|
+                Parameter == "Timeouts"), 
+       
+       aes(x = interaction(Stage, GT),
+           y = Percent,
+           fill = GT,
+           label = ID)) +
+  
+  facet_wrap(~ Parameter) +
+  
+  geom_text(hjust = 0, nudge_x = -0.1) +
+  
+  stat_summary(fun = "mean", geom = "col",
+               width = 0.75, alpha = 0.5) +
+  
+  stat_summary(fun.data = "mean_se", geom = "errorbar",
+               width = 0.5) +
+  
+  geom_jitter(color = "black",
+              size = 1,
+              width = 0.10) +
+  
+  coord_cartesian(ylim = c(0, 0.33)) +
+  
+  scale_fill_manual(values = c("blue", "red")) +
+  
+  theme_classic()
+
+
+ggplot(Master_plot %>% 
+         filter(Parameter == "Prematures"|
+                Parameter == "Perseveratives"|
+                Parameter == "Timeouts"), 
+       
+       aes(x = interaction(Stage, GT),
+           y = Percent,
+           fill = GT,
+           label = ID)) +
+  
+  facet_wrap(~ Parameter) +
+  
+  # geom_text(hjust = 0, nudge_x = 0.1) +
+  
+  stat_summary(fun = "mean", geom = "col",
+               width = 0.75, alpha = 0.5) +
+  
+  stat_summary(fun.data = "mean_se", geom = "errorbar",
+               width = 0.5) +
+  
+  geom_jitter(color = "black",
+              size = 1,
+              width = 0.10) +
+  
+  coord_cartesian(ylim = c(0, 0.33)) +
+  
+  scale_fill_manual(values = c("blue", "red")) +
+  
+  theme_classic()
+```
+
+
+```{r , fig.width = 9, fig.height = 5}
+
+summary(aov(Prematures ~ GT*Stage + Error(ID),
+            Master_df_flex_chall_ITI9 %>%
+              group_by(GT, ID, Stage) %>%
+              summarise(Max_trials = max(Trials),
+                        Correct = sum(Response == "Correct"),
+                        Prematures = sum(Response == "Premature") / Max_trials)
+            ))
+
+
+summary(aov(Perseveratives ~ GT*Stage + Error(ID),
+            Master_df_flex_chall_ITI9 %>%
+              group_by(GT, ID, Stage) %>%
+              summarise(Max_trials = max(Trials),
+                        Correct = sum(Response == "Correct"),
+                        Perseveratives = sum(Response == "Perseverative") / Max_trials)
+            ))
+
+
+summary(aov(Timeouts ~ GT*Stage + Error(ID),
+            Master_df_flex_chall_ITI9 %>%
+              group_by(GT, ID, Stage) %>%
+              summarise(Max_trials = max(Trials),
+                        Correct = sum(Response == "Correct"),
+                        Timeouts = sum(Response == "Timeout") / Max_trials)
+            ))
+```
+
+
+```{r , fig.width = 9, fig.height = 5}
+Master_plot_RT = Master_df_flex_chall_ITI9 %>% 
+         group_by(Cohort, GT, ID, Stage) %>% 
+         filter(Response == "Correct") %>%
+         
+         summarise(meanRT = mean(RT*60),
+                   sdRT = sd(RT*60),
+                   CV = sdRT / meanRT,
+                   RL = mean(na.omit(RL))) %>% 
+         
+         pivot_longer(cols = meanRT:RL,
+                      names_to = "Parameter",
+                      values_to = "Value")
+
+Master_plot_RT$Parameter = factor(Master_plot_RT$Parameter, 
+                                   levels = c("sdRT",
+                                              "meanRT",
+                                              "CV",
+                                              "RL"
+                                              ))
+```
+
+
+```{r , fig.width = 9, fig.height = 5}
+ggplot(Master_plot_RT %>% 
+         filter(Parameter == "RL"),
+       
+       aes(x = interaction(Stage, GT),
+           y = Value,
+           fill = GT,
+           label = ID)) +
+  
+  facet_wrap(~ Parameter) +
+  
+  #geom_text(hjust = 0, nudge_x = 0.1) +
+  
+  stat_summary(fun = "mean", geom = "col",
+               width = 0.75, alpha = 0.5) +
+  
+  stat_summary(fun.data = "mean_se", geom = "errorbar",
+               width = 0.5) +
+  
+  geom_jitter(color = "black", width = 0.10,
+              size = 1) +
+  
+  scale_fill_manual(values = c("blue", "red")) +
+  
+  theme_classic()
+```
+
+Filter for KI outlier RL
+
+```{r , fig.width = 9, fig.height = 5}
+ggplot(Master_plot_RT %>% 
+         filter(Parameter == "RL",
+                Value < 2),
+       
+       aes(x = interaction(Stage, GT),
+           y = Value,
+           fill = GT,
+           label = ID)) +
+  
+  facet_wrap(~ Parameter) +
+  
+  #geom_text(hjust = 0, nudge_x = 0.1) +
+  
+  stat_summary(fun = "mean", geom = "col",
+               width = 0.75, alpha = 0.5) +
+  
+  stat_summary(fun.data = "mean_se", geom = "errorbar",
+               width = 0.5) +
+  
+  geom_jitter(color = "black", width = 0.10,
+              size = 1) +
+  
+  scale_fill_manual(values = c("blue", "red")) +
+  
+  theme_classic()
+```
+
+
+```{r , fig.width = 9, fig.height = 5}
+summary(aov(RL ~ GT*Stage + Error(ID), Master_df_flex_chall_ITI9 %>% 
+         group_by(GT, ID, Stage) %>% 
+         filter(Response == "Correct") %>%
+         summarise(RL = mean(na.omit(RL)))))
+
+summary(aov(RL ~ GT*Stage + Error(ID), Master_df_flex_chall_ITI9 %>% 
+         group_by(GT, ID, Stage) %>% 
+         filter(Response == "Correct") %>%
+         summarise(RL = mean(na.omit(RL))) %>%
+           filter(RL < 2)))
+```
+
+
+
+```{r , fig.width = 9, fig.height = 5}
+ggplot(Master_plot_RT %>% 
+         filter(Parameter == "sdRT"|
+                  Parameter == "meanRT"|
+                  Parameter == "CV"),
+       
+       aes(x = interaction(Stage, GT),
+           y = Value,
+           fill = GT,
+           label = ID)) +
+  
+  facet_wrap(~ Parameter) +
+  
+  #geom_text(hjust = 0, nudge_x = 0.1) +
+  
+  stat_summary(fun = "mean", geom = "col",
+               width = 0.75, alpha = 0.5) +
+  
+  stat_summary(fun.data = "mean_se", geom = "errorbar",
+               width = 0.5) +
+  
+  geom_jitter(color = "black", width = 0.10,
+              size = 1) +
+  
+  scale_fill_manual(values = c("blue", "red")) +
+  
+  theme_classic()
+```
+
+
+```{r , fig.width = 9, fig.height = 5}
+summary(aov(CV ~ GT*Stage + Error(ID), Master_df_flex_chall_ITI9 %>% 
+         group_by(GT, ID, Stage) %>% 
+         filter(Response == "Correct") %>%
+         summarise(meanRT = mean(RT*60),
+                   sdRT = sd(RT*60),
+                   CV = sdRT / meanRT)))
+
+summary(aov(meanRT ~ GT*Stage + Error(ID), Master_df_flex_chall_ITI9 %>% 
+         group_by(GT, ID, Stage) %>% 
+         filter(Response == "Correct") %>%
+         summarise(meanRT = mean(RT*60),
+                   sdRT = sd(RT*60),
+                   CV = sdRT / meanRT)))
+
+summary(aov(sdRT ~ GT*Stage + Error(ID), Master_df_flex_chall_ITI9 %>% 
+         group_by(GT, ID, Stage) %>% 
+         filter(Response == "Correct") %>%
+         summarise(meanRT = mean(RT*60),
+                   sdRT = sd(RT*60),
+                   CV = sdRT / meanRT)))
+```
+
+```{r , fig.width = 9, fig.height = 5}
+ggplot(Master_plot_RT %>% 
+         filter(
+           # Parameter == "sdRT"|
+           #        Parameter == "meanRT"|
+                  Parameter == "CV"),
+       
+       aes(x = interaction(Stage, GT),
+           y = Value,
+           fill = GT,
+           label = ID)) +
+  
+  # facet_wrap(~ Parameter) +
+  
+  #geom_text(hjust = 0, nudge_x = 0.1) +
+  
+  stat_summary(fun = "mean", geom = "col",
+               width = 0.75, alpha = 0.5) +
+  
+  stat_summary(fun.data = "mean_se", geom = "errorbar",
+               width = 0.5) +
+  
+  geom_jitter(color = "black", width = 0.10,
+              size = 1) +
+  
+  scale_fill_manual(values = c("blue", "red")) +
+  
+  theme_classic()
+```
+
+```{r , fig.width = 9, fig.height = 5}
+
+Master_plot_RL_check = rbind(Master_plot,
+                             Master_plot_RT) %>% 
+  
+  group_by(Cohort, GT, ID, Stage) %>% 
+  summarise(
+    RL = case_when(
+      Parameter == "RL" ~ Value
+    ),
+    Perseveration = case_when(
+      Parameter == "Perseveratives" ~ Percent
+    )
+  ) %>% 
+  
+  group_by(Cohort, GT, ID, Stage) %>% 
+  summarise(
+    RL = mean(na.omit(RL)),
+    Perseveration = mean(na.omit(Perseveration))
+  ) 
+
+# Master_plot_RL_merge = merge(Master_plot, Master_plot_RT)
+
+```
+
+
+```{r , fig.width = 12, fig.height = 8}
+ggplot(Master_plot_RL_check %>% 
+         filter(!(ID == "2-12-4" & Stage == "ITI9")),
+       
+       aes(x = Perseveration,
+           y = RL,
+           color = GT,
+           fill = GT,
+           label = ID)) +
+  
+  facet_wrap(~ Stage) +
+  
+  geom_smooth(method = "lm") +
+  
+  geom_text_repel(max.overlaps = 50) +
+  
+  geom_point(size = 1) +
+  
+  scale_color_manual(values = c("blue", "red")) +
+  scale_fill_manual(values = c("blue", "red")) +
+  
+  theme_classic()
+```
+
+
+```{r , fig.width = 12, fig.height = 8}
+
+summary(aov(RL ~ (GT*Perseveration) + Error(ID),
+            Master_plot_RL_check %>% 
+              filter(Stage == "Base")))
+
+summary(aov(RL ~ (GT*Perseveration) + Error(ID),
+            Master_plot_RL_check %>%  
+              filter(Stage == "ITI9") %>%
+         filter(!(ID == "2-12-4" & Stage == "ITI9"))))
+
+```
+```{r , fig.width = 6, fig.height = 6}
+ggplot(Master_plot_RL_check %>% 
+         filter(!(ID == "2-12-4" & Stage == "ITI9")),
+       
+       aes(x = Perseveration,
+           y = RL,
+           # color = GT,
+           # fill = GT,
+           label = ID)) +
+  
+  # facet_wrap(~ Stage) +
+  
+  geom_smooth(method = "lm",
+              color = "black",
+              alpha = 0.5) +
+  
+  # geom_text_repel() +
+  
+  geom_point(size = 1) +
+  
+  # scale_color_manual(values = c("blue", "red")) +
+  # scale_fill_manual(values = c("blue", "red")) +
+  
+  theme_classic()
+```
+
+```{r , fig.width = 12, fig.height = 8}
+
+summary(aov(RL ~ (GT*Perseveration) + Error(ID),
+            Master_plot_RL_check %>% 
+         filter(!(ID == "2-12-4" & Stage == "ITI9"))))
+
+
+```
+
+```{r , fig.width = 9, fig.height = 5}
+ggplot(Master_df_flex_chall %>% 
+         filter(Stage == "ITI9",
+                Response == "Correct"),
+       
+       aes(x = Timestamp,
+           y = RT*60,
+           color = GT,
+           label = ID)) +
+  
+  geom_point(size = 1) +
+  
+  scale_color_manual(values = c("blue", "red")) +
+  
+  theme_classic()
+```
+
+
+```{r , fig.width = 9, fig.height = 6}
+ggplot(Master_df_flex_chall %>% 
+         filter(Stage == "ITI9",
+                Response == "Correct"),
+       
+       aes(x = RT*60,
+           group = ID,
+           color = GT,
+           fill = GT,
+           label = ID)) +
+  
+  geom_density(size = 0.75,
+               alpha = 0) +
+  
+  scale_color_manual(values = c("blue", "red")) +
+  scale_fill_manual(values = c("blue", "red")) +
+  
+  coord_cartesian(xlim = c(0, 4)) +
+  
+  theme_classic()
+
+
+
+
+```
+
+
+```{r , fig.width = 9, fig.height = 6}
+ggplot(Master_df_flex_chall %>% 
+         filter(Stage == "ITI9",
+                Response == "Correct"),
+       
+       aes(x = RT*60,
+           # group = ID,
+           color = GT,
+           fill = GT,
+           label = ID)) +
+  
+  geom_histogram(aes(y=..density..),
+                 alpha=0.25, 
+                 color = "black" ,
+                position="identity") +
+  
+  scale_color_manual(values = c("blue", "red")) +
+  scale_fill_manual(values = c("blue", "red")) +
+  
+  theme_classic()
+
+ggplot(Master_df_flex_chall %>% 
+         filter(Stage == "ITI9",
+                Response == "Correct"),
+       
+       aes(x = RT*60,
+           
+           color = GT,
+           fill = GT,
+           label = ID)) +
+  
+    geom_density(size = 1,
+               alpha = 0) +
+  
+  scale_color_manual(values = c("blue", "red")) +
+  scale_fill_manual(values = c("blue", "red")) +
+  
+  theme_classic()
+
+
+ggplot(Master_df_flex_chall %>% 
+         filter(Stage == "ITI9",
+                Response == "Correct"),
+       
+       aes(x = RT*60,
+           
+           color = GT,
+           fill = GT,
+           label = ID)) +
+  
+  geom_histogram(aes(y=..density..),
+                 alpha=0.25, 
+                 color = "black" ,
+                position="identity") +
+  
+  geom_density(size = 1,
+               alpha = 0) +
+  
+  scale_color_manual(values = c("blue", "red")) +
+  scale_fill_manual(values = c("blue", "red")) +
+  
+  coord_cartesian(xlim = c(0, 4)) +
+  
+  theme_classic()
+
+
+```
+emg example with data
+
+```{r , fig.width = 9, fig.height = 6}
+library(emg)
+```
+
+
+```{r , fig.width = 9, fig.height = 6}
+emg.mle(remg(200))
+  
+  ## a example involving fitting
+  data(pc9_3um_erlotinib)
+
+  intermitotic.time <- subset(pc9_3um_erlotinib, end.of.movie=='N' & died=='N')$observed
+  hist(intermitotic.time, freq=FALSE, main="PC9 in 3um erlotinib", xlab='intermitotic time (hours)')
+
+  fit <- emg.mle(intermitotic.time)
+  
+  pdf <- function(x) demg(x, coef(fit)['mu'], coef(fit)['sigma'], coef(fit)['lambda'])
+  
+  curve(pdf, from=0, to=170, add=TRUE, col='red')
+
+```
+
+
+
+```{r , fig.width = 9, fig.height = 6}
+emg.mle(intermitotic.time)
+
+RT_list_pre = Master_df_flex_chall %>% 
+         filter(Stage == "ITI9",
+                Response == "Correct")
+
+RT_list = na.omit(RT_list_pre$RT)
+
+## trying to figure out where break in dataset is
+# myfit = emg.mle(RT_list[1:1146])
+
+## runs at 1146, but breaks at 1147 
+# emg.mle(RT_list[1:1147])
+
+# RT_list[1141:1150]*60
+
+# it looks like the super high outlier is messing up the start values. filter outlier! 
+
+RT_list = RT_list*60 
+RT_list = subset(RT_list, RT_list < 3.945)
+str(RT_list)
+
+myfit = emg.mle(RT_list)
+
+myfit@coef
+```
+
+
+```{r , fig.width = 9, fig.height = 6}
+
+RT_list_pre_w = Master_df_flex_chall %>% 
+         filter(Stage == "ITI9",
+                Response == "Correct",
+                GT == "W")
+
+RT_list_w = na.omit(RT_list_pre_w$RT)
+
+RT_list_w = RT_list_w*60 
+
+RT_list_w = subset(RT_list_w, RT_list_w < 3.945)
+
+str(RT_list_w)
+
+myfit_w = emg.mle(RT_list_w)
+
+mypdf_w <- function(x) demg(x, coef(myfit_w)['mu'], coef(myfit_w)['sigma'], coef(myfit_w)['lambda'])
+ 
+ curve(mypdf_w, from=0, to=4, col='blue')
+ 
+ myfit_w@coef
+
+```
+
+```{r , fig.width = 9, fig.height = 6}
+RT_list_pre_k = Master_df_flex_chall %>% 
+         filter(Stage == "ITI9",
+                Response == "Correct",
+                GT == "K")
+
+RT_list_k = na.omit(RT_list_pre_k$RT)
+
+RT_list_k = RT_list_k*60 
+
+RT_list_k = subset(RT_list_k, RT_list_k < 3.945)
+
+str(RT_list_k)
+
+myfit_k = emg.mle(RT_list_k)
+
+mypdf_k <- function(x) demg(x, coef(myfit_k)['mu'], coef(myfit_k)['sigma'], coef(myfit_k)['lambda'])
+ 
+ curve(mypdf_k, from=0, to=4, col='red')
+ 
+ myfit_k@coef
+```
+
+```{r , fig.width = 9, fig.height = 6}
+
+  curve(mypdf_w, from=0, to=4, col='blue')
+
+  curve(mypdf_k, from=0, to=4, col='red')
+  
+    myfit_w@coef
+    myfit_k@coef
+ 
+    as.numeric(myfit_w@coef[3])
+    as.numeric(myfit_k@coef[3])
+    
+    
+```
+```{r , fig.width = 9, fig.height = 6}
+
+ggplot() +
+  
+  geom_function(fun = mypdf_w,
+                size = 1,
+                color = "blue") +
+  
+  geom_function(fun = mypdf_k,
+                size = 1,
+                color = "red") +
+  
+  xlim(0, 4) +
+  
+  coord_cartesian(ylim = c(0, 1.6)) +
+  
+  theme_classic() 
+
+```

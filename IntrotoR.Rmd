@@ -1,0 +1,56 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r }
+library(tidyverse)
+```
+
+
+```{r }
+ggplot(iris,
+       aes(x = Sepal.Length,
+           y = Sepal.Width,
+           color = Species)) +
+  
+  geom_point() +
+  
+  geom_smooth(method = "lm") +
+  
+  theme_classic()
+```
+
+
+```{r }
+ggplot(iris,
+       aes(x = Petal.Length,
+           y = Petal.Width,
+           color = Species)) +
+  
+  geom_smooth(method = "lm") +
+  
+  geom_point() +
+  
+  geom_line() +
+  
+  theme_classic()
+```
+
+
+```{r }
+
+ggplot(mtcars,
+       aes(x = cyl,
+           y = mpg)) +
+  
+  geom_jitter(width = 0.2,
+              height = 0.2) +
+  
+  geom_smooth(method = "lm") +
+  
+  theme_classic()
+
+
+```
+

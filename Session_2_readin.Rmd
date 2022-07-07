@@ -1,0 +1,35 @@
+---
+title: 'Intro to R: session 2'
+author: "Kyle Ireton"
+date: "10/4/2021"
+output: html_document
+---
+
+First, we are going to call tidyverse, so we can do things! 
+
+```{r}
+
+library(tidyverse)
+
+```
+
+Now, let's set our working directory
+
+```{r}
+
+setwd("C:/Users/kylei/Downloads")
+
+df = read_csv("210618_C5_master_flexC5_crunched_chall.csv")
+
+str(df)
+
+View(df)
+
+```
+
+```{r}
+
+df
+
+```
+

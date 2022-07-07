@@ -1,0 +1,101 @@
+---
+title: 'Intro to R: session 3'
+author: "Kyle Ireton"
+date: "10/11/2021"
+output: html_document
+---
+
+First, we are going to call tidyverse, so we can do things! 
+
+```{r}
+
+library(tidyverse)
+
+```
+
+Now, let's set our working directory
+
+```{r}
+
+setwd("C:/Users/kylei/Downloads")
+
+df = read_csv("210618_C5_master_flexC5_crunched_chall.csv")
+
+View(df)
+
+```
+
+```{r}
+
+df2 = df %>%
+  filter(Stage == "Base") %>%
+  group_by(GT, ID)  %>% 
+  filter(Response == "Correct") %>%
+  summarise(n_correct = n())
+
+View(df2)
+```
+
+```{r}
+
+ggplot(df2,
+       aes(x = GT,
+           y = n_correct,
+           color = GT)) +
+  geom_point()
+
+
+ggplot(df2,
+       aes(x = GT,
+           y = n_correct,
+           color = GT)) +
+  geom_point() +
+  theme_classic()
+
+```
+
+```{r}
+ggplot(df2,
+       aes(x = GT,
+           y = n_correct,
+           color = GT)) +
+  geom_jitter(width = 0.1,
+              height = 0) +
+  theme_classic()
+
+ggplot(df2,
+       aes(x = GT,
+           y = n_correct,
+           color = GT)) +
+  geom_jitter(width = 0.1,
+              height = 0) +
+  theme_classic()
+```
+
+
+```{r}
+ggplot(df2,
+       aes(x = GT,
+           y = n_correct,
+           color = GT)) +
+  geom_point(
+    position = position_jitter(width = 0.1,
+                               height = 0,
+                               seed = 0)
+  ) +
+  theme_classic()
+
+
+ggplot(df2,
+       aes(x = GT,
+           y = n_correct,
+           color = GT)) +
+  geom_point(
+    position = position_jitter(width = 0.1,
+                               height = 0,
+                               seed = 0)
+  ) +
+  theme_classic()
+
+```
+
